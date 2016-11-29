@@ -1,0 +1,69 @@
+import boto3
+import json
+import urllib2
+
+s3 = boto3.client('s3')
+bucket = "epic-unicorns"
+resp = []
+conn = boto3.resource('sqs')
+queue = conn.get_queue_by_name(QueueName='epic-unicorns-inbound-messages')
+
+def handle_msg(msg):
+    msg_id = msg['Id']
+    part_number = msg['PartNumber']
+    total_parts = msg['TotalParts']
+    data = msg['Data']
+    try:
+        s3.get_object(Bucket='epic-unicorns', Key='handled/'+msg_id)
+        print "Skipping duplicate " + msg_id
+        return {
+            "statusCode": 200,
+            "headers": { },
+            "body": ""
+        }
+    except Exception as e:
+        print "Not a dupe: " + msg_id
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=msg_id)
+        old_msg = json.loads(obj['Body'].read())
+        old_msg['Data' + str(part_number)] = msg['Data']
+        print("Found" + json.dumps(old_msg))
+        combined=""
+        for ind in range(0, total_parts):
+            data_var = 'Data' + str(ind)
+            if data_var not in old_msg:
+                s3.put_object(Bucket='epic-unicorns', Key=msg_id, Body=json.dumps(msg))
+                return
+            combined = combined + old_msg[data_var]
+        msg['Data'] = combined
+        s3.put_object(Bucket='epic-unicorns', Key='handled/'+msg_id, Body='done')
+        url = 'https://dashboard.cash4code.net/score/' + msg_id
+        req = urllib2.Request(url, data=combined, headers={'x-gameday-token':'75114c5a0f'})
+        resp = urllib2.urlopen(req)
+        resp.close()
+        print("Combined: " + json.dumps(msg))
+        return {
+            "statusCode": 200,
+            "headers": { },
+            "body": combined
+        }
+    except Exception as e:
+        print("Got exception a" + str(e))
+        msg['Data' + str(part_number)] = msg['Data']
+        s3.put_object(Bucket='epic-unicorns', Key=msg_id, Body=json.dumps(msg))
+        print("Stored " + json.dumps(msg))
+        return {
+            "statusCode": 200,
+            "headers": { },
+            "body": ""
+        }
+
+def lambda_handler(event, context):
+    while context.get_remaining_time_in_millis() > 10000:
+        result_set = queue.receive_messages(100)
+        for message in result_set:
+            message_body = message.body
+            data = json.loads(message_body)
+            handle_msg(data)
+            message.delete()
+    return True
