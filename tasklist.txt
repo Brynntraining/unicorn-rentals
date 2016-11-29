@@ -1,0 +1,6 @@
+Api Gateway
+SQS queue
+Kinesis stream
+epic-unicorns bucket
+epic-unicorns-inbound-messages
+create lambdas
