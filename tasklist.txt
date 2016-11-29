@@ -4,3 +4,16 @@ Kinesis stream
 epic-unicorns bucket
 epic-unicorns-inbound-messages
 create lambdas
+s3 bucket policy:
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "AddPerm",
+			"Effect": "Allow",
+			"Principal": "*",
+			"Action": "s3:PutObject",
+			"Resource": "arn:aws:s3:::epic-unicorns-inbound-messages/*"
+		}
+	]
+}
